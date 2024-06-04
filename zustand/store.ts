@@ -26,11 +26,10 @@ const StartAuth = async (
   ceramic: CeramicClient,
 ) => {
   if (walletClient) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const accountId = await getAccountId(
+    const accountId = (await getAccountId(
       walletClient,
-      walletClient.account.address as string,
-    );
+      walletClient.account.address,
+    )) as string;
     const authMethod = await EthereumWebAuth.getAuthMethod(
       walletClient,
       accountId,
