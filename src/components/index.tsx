@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { useAccount, useChainId } from "wagmi";
+import { useAccount, useChainId, useWalletClient } from "wagmi";
 import { useComposeDB } from "@/fragments";
 import { DNA } from "react-loader-spinner";
+import useStore from "../../zustand/store";
 import { DID, type DagJWS } from "dids";
 import { definition } from "@/__generated__/definition";
 import KeyResolver from "key-did-resolver";
@@ -17,8 +18,15 @@ interface Event {
   longitude?: number;
   verified?: boolean;
   timestamp: string;
-  jwt: string;
 }
+
+type returnType = {
+  err?: unknown;
+  recipient: string;
+  latitude?: number;
+  longitude?: number;
+  timestamp: string;
+};
 
 type Wallet = Event;
 type Encryption = Event;
@@ -26,7 +34,10 @@ type Encryption = Event;
 export default function Attest() {
   const [attesting, setAttesting] = useState(false);
   const [share, setShare] = useState(false);
+
+  // comment out if using Zustand
   const { compose } = useComposeDB();
+
   const [event, setEvent] = useState<"Encryption" | "Wallet" | "">("");
   const [encryptionBadge, setEncryptionBadge] = useState<Encryption | null>(
     null,
@@ -39,6 +50,12 @@ export default function Attest() {
   const [time, setTime] = useState<Date>();
   const { address } = useAccount();
   const chainId = useChainId();
+
+  // uncomment if using Zustand
+  // const { data: walletClient, isError, isLoading } = useWalletClient();
+
+  // uncomment if using Zustand
+  // const { endpoint, setEndpoint, compose, setCompose, client } = useStore();
 
   const getUserLocation = () => {
     // if geolocation is supported by the users browser
@@ -62,15 +79,16 @@ export default function Attest() {
   };
 
   const getParams = async () => {
-    const queryString = window.location.search;
-    const urlParams = new URLSearchParams(queryString);
-    const eventItem = urlParams.get("event")?.split("?")[0];
-    console.log(eventItem);
-    eventItem === definition.models.EncryptionEvent.id
-      ? setEvent("Encryption")
-      : eventItem === definition.models.WalletEvent.id
-        ? setEvent("Wallet")
-        : null;
+    // const queryString = window.location.search;
+    // const urlParams = new URLSearchParams(queryString);
+    // const eventItem = urlParams.get("event")?.split("?")[0];
+    // // console.log(eventItem);
+    // eventItem === definition.models.EncryptionEvent.id
+    //   ? setEvent("Encryption")
+    //   : eventItem === definition.models.WalletEvent.id
+    //     ? setEvent("Wallet")
+    //     : null;
+    setEvent("Encryption");
 
     const data = await compose.executeQuery<{
       node: {
@@ -87,7 +105,6 @@ export default function Attest() {
                 latitude
                 longitude
                 timestamp
-                jwt
                 }
                 encryptionEvent {
                 id
@@ -95,13 +112,12 @@ export default function Attest() {
                 latitude
                 longitude
                 timestamp
-                jwt
               }
             }
           }
         }
       `);
-    console.log(data);
+    // console.log(data);
     if (
       data as {
         data: {
@@ -124,7 +140,7 @@ export default function Attest() {
         console.log("null value");
         return;
       }
-      console.log(encryption);
+      // console.log(encryption);
 
       const wallet = data as {
         data: {
@@ -139,50 +155,6 @@ export default function Attest() {
         return;
       }
 
-      if (encryption.data.node.encryptionEvent?.jwt) {
-        try {
-          const json = Buffer.from(
-            encryption.data.node.encryptionEvent?.jwt,
-            "base64",
-          ).toString();
-          const parsed = JSON.parse(json) as { jws: DagJWS };
-          console.log(parsed);
-          const newDid = new DID({ resolver: KeyResolver.getResolver() });
-          const result = await newDid.verifyJWS(parsed.jws);
-          const didFromJwt = result.didResolutionResult.didDocument?.id;
-          console.log("This is the payload: ", didFromJwt);
-          if (
-            didFromJwt ===
-            "did:key:z6MkqusKQfvJm7CPiSRkPsGkdrVhTy8EVcQ65uB5H2wWzMMQ"
-          ) {
-            encryption.data.node.encryptionEvent.verified = true;
-          }
-        } catch (e) {
-          console.log(e);
-        }
-      }
-      if (wallet.data.node.walletEvent?.jwt) {
-        try {
-          const json = Buffer.from(
-            wallet.data.node.walletEvent.jwt,
-            "base64",
-          ).toString();
-          const parsed = JSON.parse(json) as { jws: DagJWS };
-          console.log(parsed);
-          const newDid = new DID({ resolver: KeyResolver.getResolver() });
-          const result = await newDid.verifyJWS(parsed.jws);
-          const didFromJwt = result.didResolutionResult.didDocument?.id;
-          console.log("This is the payload: ", didFromJwt);
-          if (
-            didFromJwt ===
-            "did:key:z6MkqusKQfvJm7CPiSRkPsGkdrVhTy8EVcQ65uB5H2wWzMMQ"
-          ) {
-            wallet.data.node.walletEvent.verified = true;
-          }
-        } catch (e) {
-          console.log(e);
-        }
-      }
       setEncryptionBadge(encryption.data.node.encryptionEvent);
       setWalletBadge(wallet.data.node.walletEvent);
     }
@@ -194,43 +166,24 @@ export default function Attest() {
       return;
     }
     setAttesting(true);
-    const result = await fetch("/api/create", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        recipient: address,
-        event,
-        location: userLocation,
-      }),
-    });
-    type returnType = {
-      err?: unknown;
-      recipient: string;
-      latitude?: number;
-      longitude?: number;
-      timestamp: string;
-      jwt: string;
-    };
-    const finalClaim = (await result.json()) as returnType;
-    console.log(finalClaim);
-    if (finalClaim.err) {
-      setAttesting(false);
-      alert(finalClaim.err);
-      return;
-    }
-    const data =
-      event === "Wallet" && finalClaim.latitude && finalClaim.longitude
-        ? await compose.executeQuery(`
+    const data = await compose.executeQuery<{
+      createEncryptionEvent: {
+        document: {
+          id: string;
+          recipient: string;
+          latitude: number;
+          longitude: number;
+          timestamp: string;
+        };
+      };
+    }>(`
     mutation{
-      createWalletEvent(input: {
+      createEncryptionEvent(input: {
         content: {
-          recipient: "${finalClaim.recipient}"
-          latitude: ${finalClaim.latitude}
-          longitude: ${finalClaim.longitude}
-          timestamp: "${finalClaim.timestamp}"
-          jwt: "${finalClaim.jwt}"
+          recipient: "${address}"
+          latitude: ${userLocation.latitude ?? 0}
+          longitude: ${userLocation.longitude ?? 0}
+          timestamp: "${new Date().toISOString()}"
         }
       })
       {
@@ -240,85 +193,41 @@ export default function Attest() {
           latitude
           longitude
           timestamp
-          jwt
         }
       }
     }
-  `)
-        : event === "Encryption" && finalClaim.latitude && finalClaim.longitude
-          ? await compose.executeQuery(`
-  mutation{
-    createEncryptionEvent(input: {
-      content: {
-        recipient: "${finalClaim.recipient}"
-        latitude: ${finalClaim.latitude}
-        longitude: ${finalClaim.longitude}
-        timestamp: "${finalClaim.timestamp}"
-        jwt: "${finalClaim.jwt}"
-      }
-    })
-    {
-      document{
-        id
-        recipient
-        latitude
-        longitude
-        timestamp
-        jwt
-      }
-    }
-  }
-`)
-          : event === "Wallet" && !finalClaim.latitude
-            ? await compose.executeQuery(`
-      mutation{
-        createWalletEvent(input: {
-          content: {
-            recipient: "${finalClaim.recipient}"
-            timestamp: "${finalClaim.timestamp}"
-            jwt: "${finalClaim.jwt}"
-          }
-        })
-        {
-          document{
-            id
-            recipient
-            timestamp
-            jwt
-          }
-        }
-      }
-    `)
-            : event === "Encryption" && !finalClaim.latitude
-              ? await compose.executeQuery(`
-     mutation{
-       createEncryptionEvent(input: {
-         content: {
-           recipient: "${finalClaim.recipient}"
-           timestamp: "${finalClaim.timestamp}"
-           jwt: "${finalClaim.jwt}"
-         }
-       })
-       {
-         document{
-           id
-           recipient
-           timestamp
-           jwt
-         }
-       }
-     }
-   `)
-              : null;
+  `);
     console.log(data);
     setAttesting(false);
     await getParams();
     return data;
   };
 
-  const createClaim = async () => {
-    const finalClaim = await createBadge();
-    console.log(finalClaim);
+  const createBadgeServer = async () => {
+    if (!event) {
+      alert("No event detected");
+      return;
+    }
+    setAttesting(true);
+
+    const keyResult = await fetch("/api/saveWithKey", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        recipient: address,
+        latitude: userLocation.latitude ?? 0,
+        longitude: userLocation.longitude ?? 0,
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    const claim = (await keyResult.json()) as returnType;
+    console.log(claim);
+    setAttesting(false);
+    await getParams();
+    return claim;
   };
 
   const updateTime = async () => {
@@ -335,11 +244,19 @@ export default function Attest() {
   useEffect(() => {
     void getParams();
     void updateTime();
-    console.log({
-      "encryption event id": definition.models.EncryptionEvent.id,
-      "wallet event id": definition.models.WalletEvent.id,
-    });
+    // console.log({
+    //   "encryption event id": definition.models.EncryptionEvent.id,
+    //   "wallet event id": definition.models.WalletEvent.id,
+    // });
   }, [address, chainId]);
+
+
+  // uncomment if using Zustand
+  // useEffect(() => {
+  //   if (address && walletClient) {
+  //     setCompose(walletClient, compose, client);
+  //   }
+  // }, [address, walletClient]);
 
   return (
     <div className="flex min-h-screen min-w-full flex-col items-center justify-start gap-6 px-4 py-8 sm:py-16 md:py-24">
@@ -400,15 +317,26 @@ export default function Attest() {
           </div>
           <div className="mt-6 flex justify-center">
             {!attesting ? (
-              <button
-                className="w-1/2 transform rounded-md bg-indigo-700 px-4 py-2 text-sm text-white transition-colors duration-200 hover:bg-indigo-600 focus:bg-indigo-600 focus:outline-none"
-                onClick={async (e) => {
-                  e.preventDefault();
-                  await createClaim();
-                }}
-              >
-                {"Generate Badge"}
-              </button>
+              <div className="flex w-full flex-col items-center justify-center gap-4">
+                <button
+                  className="w-1/2 transform rounded-md bg-indigo-700 px-4 py-2 text-sm text-white transition-colors duration-200 hover:bg-indigo-600 focus:bg-indigo-600 focus:outline-none"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    await createBadge();
+                  }}
+                >
+                  {"Generate Badge with did:pkh"}
+                </button>
+                <button
+                  className="w-1/2 transform rounded-md bg-indigo-700 px-4 py-2 text-sm text-white transition-colors duration-200 hover:bg-indigo-600 focus:bg-indigo-600 focus:outline-none"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    await createBadgeServer();
+                  }}
+                >
+                  {"Generate Badge with did:key"}
+                </button>
+              </div>
             ) : (
               <DNA
                 visible={true}

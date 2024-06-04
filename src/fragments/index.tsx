@@ -26,7 +26,7 @@ const CERAMIC_URL = process.env.URL ?? "http://localhost:7007";
  */
 const ceramic = new CeramicClient(CERAMIC_URL);
 
-const compose = new ComposeClient({
+export const compose = new ComposeClient({
   ceramic,
   definition: definition as RuntimeCompositeDefinition,
 });
@@ -48,20 +48,20 @@ export const ComposeDB = ({ children }: ComposeDBProps) => {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           const accountId = await getAccountId(
             walletClient,
-            walletClient.account.address,
+            walletClient.account.address as string,
           );
           const authMethod = await EthereumWebAuth.getAuthMethod(
             walletClient,
             accountId,
           );
           // change to use specific resource
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           const session = await DIDSession.get(accountId, authMethod, {
             resources: compose.resources,
           });
 
           await ceramic.setDID(session.did as unknown as DID);
-          console.log("Auth'd:", session.did.parent);
+          compose.setDID(session.did as unknown as DID);
+          console.log("Auth'd:", session);
           localStorage.setItem("did", session.did.parent);
           setAuth(true);
         }

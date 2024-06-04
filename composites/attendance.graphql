@@ -6,7 +6,6 @@ interface GeneralAttendance
   latitude: Float
   longitude: Float
   timestamp: DateTime!
-  jwt: String! @string(maxLength: 100000)
 }
 
 type EncryptionEvent implements GeneralAttendance
@@ -16,7 +15,6 @@ type EncryptionEvent implements GeneralAttendance
   latitude: Float
   longitude: Float
   timestamp: DateTime!
-  jwt: String! @string(maxLength: 100000)
 }
 
 type WalletEvent implements GeneralAttendance
@@ -26,6 +24,5 @@ type WalletEvent implements GeneralAttendance
   latitude: Float
   longitude: Float
   timestamp: DateTime!
-  jwt: String! @string(maxLength: 100000)
 }
 
